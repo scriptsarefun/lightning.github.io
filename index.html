@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Napoleon: Naval Empire</title>
+    <title>Napoleon: Naval Empire [NEON OVERDRIVE EDITION]</title>
     <style>
         * {
             box-sizing: border-box;
@@ -15,9 +15,9 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            font-family: 'Georgia', serif;
-            background-color: #0a1622;
-            color: #f5f5f5;
+            font-family: 'Courier New', monospace;
+            background-color: #030712;
+            color: #f3f4f6;
         }
         #gameCanvas {
             display: block;
@@ -37,7 +37,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Dynamic Sizing
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
@@ -45,24 +44,37 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // Palette
-        const CLR_OCEAN = '#12263a';
-        const CLR_WAVE = '#183048';
-        const CLR_GOLD = '#daa520';
-        const CLR_HUD_BG = '#0f141c';
-        const CLR_HUD_BORDER = '#c5a059';
-        const CLR_WHITE = '#f5f5f5';
-        const CLR_WOOD = '#654321';
-        const CLR_SAIL = '#f0ebd8';
-        const CLR_FRENCH = '#183572';
-        const CLR_BRITISH = '#b22222';
+        // 10x cooler cyberpunk-historical glowing palette
+        const CLR_OCEAN = '#060b13';
+        const CLR_CYAN = '#00f2ff';
+        const CLR_NEON_RED = '#ff0055';
+        const CLR_GOLD = '#ffbc00';
+        const CLR_HUD_BG = '#090d16';
+        const CLR_HUD_BORDER = '#38bdf8';
+        const CLR_WHITE = '#ffffff';
 
-        // Engine State
-        let gameState = 'MENU'; // MENU, SHOP, PLAY
+        let gameState = 'MENU'; 
         let selectedShip = null;
         let mouseX = 0, mouseY = 0;
+        let frameCount = 0;
 
-        // Camera System
+        // Upgraded Global Modifiers
+        const systems = {
+            goldDoubloons: 1000, // 10x more starting money
+            score: 0,
+            combo: 0,
+            comboTimer: 0,
+            windAngle: 0,
+            windSpeed: 2.5
+        };
+
+        const shopItems = [
+            { name: "☢️ Plasma Hull Matrices (+500 HP)", cost: 400, bought: false },
+            { name: "⚡ Overcharged Volley Rail-Cannons (+100% Damage)", cost: 600, bought: false },
+            { name: "🌌 Hyperspace Rudders (+200% Turn Rate & Max Speed)", cost: 300, bought: false }
+        ];
+
+        // Hyper Camera System (Intense Screen Shake + Vector Lag)
         const camera = {
             shakeIntensity: 0,
             shakeDuration: 0,
@@ -76,419 +88,254 @@
             },
             update() {
                 if (this.shakeDuration > 0) {
-                    this.dx = Math.floor(Math.random() * (this.shakeIntensity * 2 + 1)) - this.shakeIntensity;
-                    this.dy = Math.floor(Math.random() * (this.shakeIntensity * 2 + 1)) - this.shakeIntensity;
+                    this.dx = (Math.random() - 0.5) * this.shakeIntensity * 3;
+                    this.dy = (Math.random() - 0.5) * this.shakeIntensity * 3;
                     this.shakeDuration--;
                     if (this.shakeDuration === 0) this.shakeIntensity = 0;
                 } else {
-                    this.dx = 0;
-                    this.dy = 0;
+                    this.dx += (0 - this.dx) * 0.15;
+                    this.dy += (0 - this.dy) * 0.15;
                 }
             }
         };
 
-        // Particle Manager
-        const particleManager = {
+        // Advanced Visual FX Suite (Glowing Neon Trails, Plasma Shockwaves, Floating Damage Text)
+        const fxManager = {
             particles: [],
-            wakes: [],
-            spawnSmoke(x, y, size = 15, count = 6) {
-                for (let i = 0; i < count; i++) {
+            shockwaves: [],
+            floatingText: [],
+            spawnThrusterGlow(x, y, color) {
+                this.particles.push({
+                    type: 'trail', x: x, y: y,
+                    vx: (Math.random() - 0.5) * 1, vy: (Math.random() - 0.5) * 1,
+                    radius: Math.random() * 4 + 2, alpha: 1, decay: 0.03, color: color
+                });
+            },
+            spawnPlasmaBlast(x, y, color) {
+                for (let i = 0; i < 20; i++) {
                     let ang = Math.random() * Math.PI * 2;
-                    let mag = Math.random() * 1.5 + 0.5;
+                    let mag = Math.random() * 6 + 2;
                     this.particles.push({
-                        type: 'smoke', x: x, y: y,
+                        type: 'spark', x: x, y: y,
                         vx: Math.cos(ang) * mag, vy: Math.sin(ang) * mag,
-                        radius: Math.random() * (size * 0.6) + (size * 0.4),
-                        alpha: 220, decay: Math.random() * 3 + 2
+                        radius: Math.random() * 3 + 2, alpha: 1, decay: 0.02, color: color
                     });
                 }
+                this.shockwaves.push({ x: x, y: y, radius: 5, maxRadius: 60, alpha: 1, color: color });
             },
-            spawnSplinterExplosion(x, y) {
-                this.spawnSmoke(x, y, 22, 12);
-                for (let i = 0; i < 25; i++) {
-                    let ang = Math.random() * Math.PI * 2;
-                    let mag = Math.random() * 3 + 1.5;
-                    this.particles.push({
-                        type: 'splinter', x: x, y: y,
-                        vx: Math.cos(ang) * mag, vy: Math.sin(ang) * mag,
-                        radius: Math.random() * 2 + 1.5,
-                        alpha: 255, decay: Math.random() * 4 + 4
-                    });
-                }
-            },
-            spawnWake(x, y, radius) {
-                if (Math.random() < 0.4) {
-                    this.wakes.push({ x: x, y: y, radius: radius * 0.5, alpha: 150 });
-                }
+            spawnDamageText(x, y, text, color) {
+                this.floatingText.push({ x: x, y: y, text: text, color: color, alpha: 1, vy: -1.5 });
             },
             update() {
-                for (let i = this.wakes.length - 1; i >= 0; i--) {
-                    let w = this.wakes[i];
-                    w.radius += 0.3;
-                    w.alpha -= 3;
-                    if (w.alpha <= 0) this.wakes.splice(i, 1);
-                }
+                // Particles
                 for (let i = this.particles.length - 1; i >= 0; i--) {
                     let p = this.particles[i];
-                    p.x += p.vx;
-                    p.y += p.vy;
-                    if (p.type === 'smoke') {
-                        p.vx *= 0.97; p.vy *= 0.97;
-                        p.radius += 0.15;
-                    }
+                    p.x += p.vx; p.y += p.vy;
                     p.alpha -= p.decay;
+                    if (p.type === 'trail') p.radius *= 0.95;
                     if (p.alpha <= 0) this.particles.splice(i, 1);
                 }
+                // Shockwaves
+                for (let i = this.shockwaves.length - 1; i >= 0; i--) {
+                    let s = this.shockwaves[i];
+                    s.radius += 4;
+                    s.alpha -= 0.04;
+                    if (s.alpha <= 0 || s.radius >= s.maxRadius) this.shockwaves.splice(i, 1);
+                }
+                // Floating text
+                for (let i = this.floatingText.length - 1; i >= 0; i--) {
+                    let t = this.floatingText[i];
+                    t.y += t.vy;
+                    t.alpha -= 0.02;
+                    if (t.alpha <= 0) this.floatingText.splice(i, 1);
+                }
             },
-            drawWakes(ctx, cam) {
+            draw(ctx) {
                 ctx.save();
-                for (let w of this.wakes) {
-                    ctx.strokeStyle = `rgba(200, 220, 240, ${w.alpha / 255})`;
-                    ctx.lineWidth = 2;
+                // Draw shockwaves
+                for (let s of this.shockwaves) {
+                    ctx.strokeStyle = s.color;
+                    ctx.globalAlpha = s.alpha;
+                    ctx.lineWidth = 3;
+                    ctx.shadowBlur = 15; ctx.shadowColor = s.color;
                     ctx.beginPath();
-                    ctx.arc(w.x + cam.dx, w.y + cam.dy, w.radius, 0, Math.PI * 2);
+                    ctx.arc(s.x + camera.dx, s.y + camera.dy, s.radius, 0, Math.PI * 2);
                     ctx.stroke();
                 }
-                ctx.restore();
-            },
-            drawTopLayers(ctx, cam) {
-                ctx.save();
+                // Draw particles
+                ctx.shadowBlur = 10;
                 for (let p of this.particles) {
-                    let alpha = Math.max(0, Math.min(255, p.alpha)) / 255;
-                    if (p.type === 'smoke') {
-                        ctx.fillStyle = `rgba(220, 220, 220, ${alpha})`;
-                    } else if (p.type === 'splinter') {
-                        ctx.fillStyle = `rgba(230, 140, 40, ${alpha})`;
-                    }
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.alpha;
+                    ctx.shadowColor = p.color;
                     ctx.beginPath();
-                    ctx.arc(p.x + cam.dx, p.y + cam.dy, p.radius, 0, Math.PI * 2);
+                    ctx.arc(p.x + camera.dx, p.y + camera.dy, p.radius, 0, Math.PI * 2);
                     ctx.fill();
+                }
+                // Draw Floating texts
+                ctx.shadowBlur = 0;
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 16px "Courier New"';
+                for (let t of this.floatingText) {
+                    ctx.fillStyle = t.color;
+                    ctx.globalAlpha = t.alpha;
+                    ctx.fillText(t.text, t.x + camera.dx, t.y + camera.dy);
                 }
                 ctx.restore();
             }
         };
 
-        // CannonBall Class
-        class CannonBall {
-            constructor(x, y, vx, vy, faction) {
-                this.x = x; this.y = y;
-                this.vx = vx; this.vy = vy;
-                this.faction = faction;
-                this.age = 0; this.maxAge = 70;
+        // CannonBall Class (Neon railgun shots)
+        class LaserShell {
+            constructor(x, y, vx, vy, color, faction) {
+                this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+                this.color = color; this.faction = faction;
+                this.age = 0; this.maxAge = 80;
             }
             update() {
-                this.x += this.vx;
-                this.y += this.vy;
+                this.x += this.vx; this.y += this.vy;
+                fxManager.spawnThrusterGlow(this.x, this.y, this.color);
                 this.age++;
             }
-            draw(ctx, cam) {
-                ctx.fillStyle = '#0f0f0f';
+            draw(ctx) {
+                ctx.save();
+                ctx.shadowBlur = 15; ctx.shadowColor = this.color;
+                ctx.fillStyle = '#ffffff';
                 ctx.beginPath();
-                ctx.arc(this.x + cam.dx, this.y + cam.dy, 4, 0, Math.PI * 2);
+                ctx.arc(this.x + camera.dx, this.y + camera.dy, 5, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.restore();
             }
         }
+        const activeProjectiles = [];
 
-        // Ship Class
-        class Ship {
+        // Ship Class (Cyber-Dreadnought Hull Arrays)
+        class Dreadnought {
             constructor(x, y, faction, name) {
-                this.x = x; this.y = y;
-                this.faction = faction;
-                this.name = name;
+                this.x = x; this.y = y; this.faction = faction; this.name = name;
                 this.angle = faction === 'French' ? 0 : Math.PI;
                 this.speed = 0;
-                this.maxSpeed = 2.2;
-                this.turnSpeed = 0.025;
-                this.health = 450;
-                this.maxHealth = 450;
-                this.selected = false;
-                this.isSunk = false;
-                this.reloadTimer = 0;
-                this.reloadCooldown = 150;
-                this.length = 50;
-                this.width = 18;
-                this.targetX = null;
-                this.targetY = null;
+                this.maxSpeed = faction === 'French' ? 2.5 : 2.0;
+                this.turnSpeed = 0.03;
+                this.health = 600; this.maxHealth = 600;
+                this.selected = false; this.isSunk = false;
+                this.reloadTimer = 0; this.reloadCooldown = 80; // Rapid firing!
+                this.length = 60; this.width = 22;
+                this.tx = x; this.ty = y;
+                this.glowColor = faction === 'French' ? CLR_CYAN : CLR_NEON_RED;
             }
-            navigateTowards(tx, ty) {
-                this.targetX = tx;
-                this.targetY = ty;
+            navigate(tx, ty) {
+                if (!this.isSunk) { this.tx = tx; this.ty = ty; }
             }
-            updatePhysics() {
+            update() {
                 if (this.isSunk) return;
 
-                if (this.targetX !== null && this.targetY !== null) {
-                    let dx = this.targetX - this.x;
-                    let dy = this.targetY - this.y;
-                    let dist = Math.hypot(dx, dy);
-                    if (dist > 30) {
-                        let targetAngle = Math.atan2(dy, dx);
-                        let angleDiff = (targetAngle - this.angle + Math.PI) % (Math.PI * 2) - Math.PI;
-                        if (angleDiff > 0) this.angle += Math.min(this.turnSpeed, angleDiff);
-                        else this.angle += Math.max(-this.turnSpeed, angleDiff);
-                        this.speed = Math.min(this.speed + 0.03, this.maxSpeed);
-                    } else {
-                        this.speed *= 0.95;
-                        this.targetX = null;
-                        this.targetY = null;
-                    }
+                // Dynamic item upgrades application
+                if (this.faction === 'French') {
+                    if (shopItems[2].bought) { this.maxSpeed = 5.0; this.turnSpeed = 0.08; }
                 }
+
+                let dx = this.tx - this.x; let dy = this.ty - this.y; let dist = Math.hypot(dx, dy);
+                if (dist > 25) {
+                    let targetAngle = Math.atan2(dy, dx);
+                    let diff = (targetAngle - this.angle + Math.PI) % (Math.PI * 2) - Math.PI;
+                    this.angle += Math.min(this.turnSpeed, Math.max(-this.turnSpeed, diff));
+                    this.speed = Math.min(this.speed + 0.08, this.maxSpeed);
+                } else { this.speed *= 0.88; }
 
                 this.x += Math.cos(this.angle) * this.speed;
                 this.y += Math.sin(this.angle) * this.speed;
 
-                if (this.speed > 0.4) {
-                    let bx = this.x - Math.cos(this.angle) * (this.length * 0.4);
-                    let by = this.y - Math.sin(this.angle) * (this.length * 0.4);
-                    particleManager.spawnWake(bx, by, this.width);
-                }
+                // Spawn glowing neon engine trails
+                let ex = this.x - Math.cos(this.angle) * (this.length / 2);
+                let ey = this.y - Math.sin(this.angle) * (this.length / 2);
+                fxManager.spawnThrusterGlow(ex, ey, this.glowColor);
+
                 if (this.reloadTimer > 0) this.reloadTimer--;
             }
-            fireBroadside(side, ballPool) {
+            fireBroadside(side) {
                 if (this.isSunk || this.reloadTimer > 0) return;
                 this.reloadTimer = this.reloadCooldown;
-                camera.triggerShake(8, 12);
+                camera.triggerShake(15, 15); // Multiplied blast force
 
-                let fireAngle = this.angle + (side === 'left' ? Math.PI / 2 : -Math.PI / 2);
+                let fireAngle = this.angle + (side === 'left' ? -Math.PI / 2 : Math.PI / 2);
+                let count = 6; // 10x cooler: More gun batteries!
 
-                for (let i = -2; i <= 2; i++) {
-                    let offset = i * 8;
+                for (let i = -3; i <= 3; i++) {
+                    if (i === 0) continue;
+                    let offset = i * 7;
                     let hx = this.x + Math.cos(this.angle) * offset;
                     let hy = this.y + Math.sin(this.angle) * offset;
-                    let spread = fireAngle + (Math.random() * 0.16 - 0.08);
-                    let bSpeed = Math.random() * 1.5 + 6.0;
-                    let vx = Math.cos(spread) * bSpeed;
-                    let vy = Math.sin(spread) * bSpeed;
+                    let spread = fireAngle + (Math.random() - 0.5) * 0.08;
+                    let bSpeed = Math.random() * 2 + 9; // Ultra fast projectiles
 
-                    ballPool.push(new CannonBall(hx, hy, vx, vy, this.faction));
-                    particleManager.spawnSmoke(hx + Math.cos(fireAngle) * 8, hy + Math.sin(fireAngle) * 8, 10, 4);
+                    activeProjectiles.push(new LaserShell(hx, hy, Math.cos(spread) * bSpeed, Math.sin(spread) * bSpeed, this.glowColor, this.faction));
                 }
+                fxManager.spawnPlasmaBlast(this.x + Math.cos(fireAngle)*15, this.y + Math.sin(fireAngle)*15, this.glowColor);
             }
-            draw(ctx, cam) {
-                let px = this.x + cam.dx;
-                let py = this.y + cam.dy;
-
+            draw(ctx) {
+                let px = this.x + camera.dx; let py = this.y + camera.dy;
                 if (this.isSunk) {
-                    ctx.save();
-                    ctx.translate(px, py);
-                    ctx.rotate(this.angle);
-                    ctx.fillStyle = 'rgba(20, 20, 20, 0.47)';
-                    ctx.beginPath();
-                    ctx.ellipse(0, 0, this.length / 2, this.width / 2, 0, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.restore();
-                    return;
+                    ctx.save(); ctx.translate(px, py); ctx.rotate(this.angle);
+                    ctx.fillStyle = '#111827'; ctx.beginPath();
+                    ctx.ellipse(0, 0, this.length/2, this.width/2, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.restore(); return;
                 }
 
-                if (this.selected) {
-                    ctx.save();
-                    ctx.strokeStyle = CLR_GOLD;
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.ellipse(px, py, 40, 25, 0, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.restore();
-                }
-
-                // Render Hull
                 ctx.save();
                 ctx.translate(px, py);
                 ctx.rotate(this.angle);
 
-                ctx.fillStyle = CLR_WOOD;
+                // Hyper Glow Shield Grid
+                if (this.selected) {
+                    ctx.shadowBlur = 20; ctx.shadowColor = CLR_GOLD;
+                    ctx.strokeStyle = CLR_GOLD; ctx.lineWidth = 2;
+                    ctx.strokeRect(-this.length/2 - 6, -this.width/2 - 6, this.length + 12, this.width + 12);
+                }
+
+                // Sleek Neon Chassis
+                ctx.shadowBlur = 12; ctx.shadowColor = this.glowColor;
+                ctx.fillStyle = '#1e293b'; ctx.strokeStyle = this.glowColor; ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.moveTo(this.length / 2, 0);
-                ctx.lineTo(this.length / 4, -this.width / 2);
-                ctx.lineTo(-this.length / 2, -this.width / 2);
-                ctx.lineTo(-this.length / 2, this.width / 2);
-                ctx.lineTo(this.length / 4, this.width / 2);
-                ctx.closePath();
-                ctx.fill();
+                ctx.moveTo(this.length/2, 0);
+                ctx.lineTo(this.length/4, -this.width/2);
+                ctx.lineTo(-this.length/2, -this.width/2);
+                ctx.lineTo(-this.length/2, this.width/2);
+                ctx.lineTo(this.length/4, this.width/2);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
 
-                ctx.strokeStyle = '#281e14';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // Sails
-                ctx.strokeStyle = CLR_SAIL;
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.moveTo(-10, -this.width / 2 + 2);
-                ctx.lineTo(-10, this.width / 2 - 2);
-                ctx.moveTo(10, -this.width / 2 + 4);
-                ctx.lineTo(10, this.width / 2 - 4);
-                ctx.stroke();
-
-                // Flag
-                ctx.fillStyle = this.faction === 'French' ? CLR_FRENCH : CLR_BRITISH;
-                ctx.fillRect(-this.length / 2 - 4, -3, 6, 6);
+                // Cyber energy lines
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(15, 0); ctx.stroke();
 
                 ctx.restore();
 
-                // Health bar
-                let barW = 40;
-                let barX = px - barW / 2;
-                let barY = py - 30;
-                let hpPct = Math.max(0, this.health / this.maxHealth);
-                ctx.fillStyle = '#280a0a';
-                ctx.fillRect(barX, barY, barW, 4);
-                ctx.fillStyle = '#28dc28';
-                ctx.fillRect(barX, barY, Math.floor(barW * hpPct), 4);
+                // Advanced Status Bar (Health & Reload Overlay)
+                let barW = 50; let bx = px - barW/2; let by = py - 35;
+                ctx.fillStyle = '#374151'; ctx.fillRect(bx, by, barW, 4);
+                ctx.fillStyle = this.glowColor; ctx.fillRect(bx, by, barW * (this.health / this.maxHealth), 4);
+                // Reload micro-progress dot
+                if (this.reloadTimer > 0) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(bx, by + 5, barW * (1 - this.reloadTimer / this.reloadCooldown), 2);
+                }
             }
         }
 
-        // Setup Entities
         const playerFleet = [
-            new Ship(300, 250, 'French', "L'Orient (Flagship)"),
-            new Ship(300, 450, 'French', "Le Redoutable"),
-            new Ship(300, 650, 'French', "Le Bucentaure")
+            new Dreadnought(300, 220, 'French', "N-1 CORE OVERLORD"),
+            new Dreadnought(300, 440, 'French', "N-2 ECLIPSE RAIDER"),
+            new Dreadnought(300, 660, 'French', "N-3 VOID FRIGATE")
         ];
 
         const enemyFleet = [
-            new Ship(1140, 280, 'British', "HMS Victory"),
-            new Ship(1140, 480, 'British', "HMS Royal Sovereign"),
-            new Ship(1140, 680, 'British', "HMS Britannia")
+            new Dreadnought(canvas.width - 300, 250, 'British', "BR-X COALITION BEHEMOTH"),
+            new Dreadnought(canvas.width - 300, 470, 'British', "BR-Y TITAN SLAYER"),
+            new Dreadnought(canvas.width - 300, 690, 'British', "BR-Z REAPER ENGINE")
         ];
 
-        const cannonBalls = [];
-
-        // UI & Shop Data System
-        const uiSystem = {
-            goldDoubloons: 350,
-            menuButtons: {
-                play: { x: 0, y: 0, w: 300, h: 50 },
-                shop: { x: 0, y: 0, w: 300, h: 50 },
-                quit: { x: 0, y: 0, w: 300, h: 50 }
-            },
-            shopItems: [
-                { name: "Upgrade Hull Armor", cost: 150, bought: false },
-                { name: "Heavy Powder Charges", cost: 200, bought: false },
-                { name: "Elite Royal Helmsman", cost: 100, bought: false }
-            ],
-            updateButtonLayout() {
-                const cx = canvas.width / 2;
-                const cy = canvas.height / 2;
-                this.menuButtons.play.x = cx - 150; this.menuButtons.play.y = cy - 40;
-                this.menuButtons.shop.x = cx - 150; this.menuButtons.shop.y = cy + 30;
-                this.menuButtons.quit.x = cx - 150; this.menuButtons.quit.y = cy + 100;
-            },
-            drawMainMenu(ctx) {
-                this.updateButtonLayout();
-                ctx.fillStyle = '#0a1622';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                for (let i = 0; i < canvas.width; i += 80) {
-                    ctx.strokeStyle = '#0e1e2e';
-                    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
-                }
-
-                ctx.textAlign = 'center';
-                ctx.fillStyle = CLR_GOLD;
-                ctx.font = 'bold 42px Georgia';
-                ctx.fillText("NAPOLEON: EMPIRE AT SEA", canvas.width / 2, canvas.height / 2 - 160);
-
-                ctx.fillStyle = CLR_WHITE;
-                ctx.font = 'italic 20px Georgia';
-                ctx.fillText("Tactical Command and Naval Broadside Simulation", canvas.width / 2, canvas.height / 2 - 110);
-
-                ctx.fillStyle = CLR_GOLD;
-                ctx.font = 'bold 14px Courier';
-                ctx.fillText(`👑 IMPERIAL TREASURY: ${this.goldDoubloons} DOUBLOONS`, canvas.width / 2, canvas.height / 2 - 75);
-
-                for (let key in this.menuButtons) {
-                    let btn = this.menuButtons[key];
-                    let isHover = mouseX >= btn.x && mouseX <= btn.x + btn.w && mouseY >= btn.y && mouseY <= btn.y + btn.h;
-                    ctx.fillStyle = isHover ? '#283c50' : '#192837';
-                    ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
-                    ctx.strokeStyle = isHover ? CLR_GOLD : CLR_HUD_BORDER;
-                    ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
-
-                    ctx.fillStyle = CLR_WHITE;
-                    ctx.font = 'italic 20px Georgia';
-                    ctx.fillText(key.toUpperCase(), btn.x + btn.w / 2, btn.y + btn.h / 2 + 7);
-                }
-            },
-            drawShopMenu(ctx) {
-                ctx.fillStyle = '#0c121a';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.strokeStyle = CLR_HUD_BORDER;
-                ctx.lineWidth = 2;
-                ctx.strokeRect(50, 50, canvas.width - 100, canvas.height - 100);
-
-                ctx.textAlign = 'left';
-                ctx.fillStyle = CLR_GOLD;
-                ctx.font = 'bold 36px Georgia';
-                ctx.fillText("IMPERIAL ADMIRALTY ADMIRAL SHOP", 100, 110);
-
-                ctx.fillStyle = CLR_WHITE;
-                ctx.font = 'bold 14px Courier';
-                ctx.fillText(`CURRENT BALANCE: ${this.goldDoubloons} DOUBLOONS`, 100, 160);
-
-                for (let i = 0; i < this.shopItems.length; i++) {
-                    let item = this.shopItems[i];
-                    let bx = 100, by = 220 + i * 80, bw = canvas.width - 200, bh = 60;
-                    let isHover = mouseX >= bx && mouseX <= bx + bw && mouseY >= by && mouseY <= by + bh;
-
-                    ctx.fillStyle = isHover ? '#202d3e' : '#16202d';
-                    ctx.fillRect(bx, by, bw, bh);
-                    ctx.strokeStyle = item.bought ? CLR_GOLD : CLR_HUD_BORDER;
-                    ctx.strokeRect(bx, by, bw, bh);
-
-                    let status = item.bought ? "ACQUIRED" : `BUY: ${item.cost} GOLD`;
-                    ctx.fillStyle = CLR_WHITE;
-                    ctx.fillText(`${item.name} - Status: ${status}`, 130, by + 35);
-                }
-
-                let escX = 100, escY = canvas.height - 120, escW = 240, escH = 45;
-                ctx.fillStyle = '#641e1e';
-                ctx.fillRect(escX, escY, escW, escH);
-                ctx.fillStyle = CLR_WHITE;
-                ctx.textAlign = 'center';
-                ctx.fillText("[ESC] BACK TO MENU", escX + escW / 2, escY + escH / 2 + 5);
-            },
-            drawCombatHud(ctx, selectedShip, activeFr, activeBr) {
-                const hH = 140;
-                const hY = canvas.height - hH;
-                ctx.fillStyle = CLR_HUD_BG;
-                ctx.fillRect(0, hY, canvas.width, hH);
-                ctx.strokeStyle = CLR_HUD_BORDER;
-                ctx.lineWidth = 3;
-                ctx.beginPath(); ctx.moveTo(0, hY); ctx.lineTo(canvas.width, hY); ctx.stroke();
-
-                ctx.fillStyle = '#182028';
-                ctx.fillRect(canvas.width - 360, hY + 20, 330, 45);
-                ctx.strokeStyle = CLR_GOLD;
-                ctx.lineWidth = 1;
-                ctx.strokeRect(canvas.width - 360, hY + 20, 330, 45);
-
-                ctx.textAlign = 'left';
-                ctx.fillStyle = CLR_GOLD;
-                ctx.font = 'bold 14px Courier';
-                ctx.fillText(`👑 TREASURY COINS: ${this.goldDoubloons} DOUBLOONS`, canvas.width - 340, hY + 47);
-
-                ctx.fillStyle = '#508ce1';
-                ctx.fillText(`FRENCH SHIPS FORCE: ${activeFr} LIVE`, 40, hY + 35);
-                ctx.fillStyle = '#f55050';
-                ctx.fillText(`BRITISH FLEET TARGET: ${activeBr} LIVE`, 40, hY + 55);
-
-                if (selectedShip) {
-                    ctx.fillStyle = CLR_WHITE;
-                    ctx.fillText(`COMMANDING FLAGSHIP: ${selectedShip.name} | RELOAD COOLDOWN: ${selectedShip.reloadTimer} FRAMES`, 40, hY + 95);
-                    ctx.fillStyle = CLR_GOLD;
-                    ctx.fillText(`[Q] FIRE LEFT BROADSIDE  |  [E] FIRE RIGHT BROADSIDE  |  [R-CLICK] NAVIGATE STEER`, 40, hY + 118);
-                } else {
-                    ctx.fillStyle = '#969696';
-                    ctx.fillText("LEFT-CLICK SHIP VESSEL TO ASSUME DIRECT FLEET SECTOR COMMAND.", 40, hY + 95);
-                }
-            }
-        };
-
-        // User Inputs Tracking
-        window.addEventListener('mousemove', (e) => {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-        });
-
+        // Controls Matrices Mapping System
+        window.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
         window.addEventListener('mousedown', (e) => {
             if (gameState === 'MENU') {
                 if (mouseX >= uiSystem.menuButtons.play.x && mouseX <= uiSystem.menuButtons.play.x + uiSystem.menuButtons.play.w &&
@@ -497,161 +344,218 @@
                 } else if (mouseX >= uiSystem.menuButtons.shop.x && mouseX <= uiSystem.menuButtons.shop.x + uiSystem.menuButtons.shop.w &&
                            mouseY >= uiSystem.menuButtons.shop.y && mouseY <= uiSystem.menuButtons.shop.y + uiSystem.menuButtons.shop.h) {
                     gameState = 'SHOP';
-                } else if (mouseX >= uiSystem.menuButtons.quit.x && mouseX <= uiSystem.menuButtons.quit.x + uiSystem.menuButtons.quit.w &&
-                           mouseY >= uiSystem.menuButtons.quit.y && mouseY <= uiSystem.menuButtons.quit.y + uiSystem.menuButtons.quit.h) {
-                    window.close();
                 }
             } else if (gameState === 'SHOP') {
-                for (let i = 0; i < uiSystem.shopItems.length; i++) {
-                    let bx = 100, by = 220 + i * 80, bw = canvas.width - 200, bh = 60;
-                    if (mouseX >= bx && mouseX <= bx + bw && mouseY >= by && mouseY <= by + bh && !uiSystem.shopItems[i].bought) {
-                        if (uiSystem.goldDoubloons >= uiSystem.shopItems[i].cost) {
-                            uiSystem.goldDoubloons -= uiSystem.shopItems[i].cost;
-                            uiSystem.shopItems[i].bought = true;
-                            if (i === 0) {
-                                for (let s of playerFleet) { s.maxHealth += 150; s.health += 150; }
-                            }
-                        }
+                if (mouseX >= 100 && mouseX <= 340 && mouseY >= canvas.height - 120 && mouseY <= canvas.height - 75) gameState = 'MENU';
+                shopItems.forEach((item, idx) => {
+                    let bx = 100, by = 220 + idx * 80, bw = canvas.width - 200, bh = 60;
+                    if (mouseX >= bx && mouseX <= bx + bw && mouseY >= by && mouseY <= by + bh && !item.bought && systems.goldDoubloons >= item.cost) {
+                        systems.goldDoubloons -= item.cost; item.bought = true;
+                        if (idx === 0) playerFleet.forEach(s => { s.maxHealth += 500; s.health += 500; });
                     }
-                }
-                let escX = 100, escY = canvas.height - 120, escW = 240, escH = 45;
-                if (mouseX >= escX && mouseX <= escX + escW && mouseY >= escY && mouseY <= escY + escH) {
-                    gameState = 'MENU';
-                }
-            } else if (gameState === 'PLAY') {
-                if (mouseY < canvas.height - 140) {
-                    if (e.button === 0) { // Left click
-                        selectedShip = null;
-                        for (let s of playerFleet) {
-                            s.selected = false;
-                            if (Math.hypot(s.x - mouseX, s.y - mouseY) < 45) {
-                                s.selected = true;
-                                selectedShip = s;
-                            }
-                        }
-                    }
+                });
+            } else if (gameState === 'PLAY' && mouseY < canvas.height - 140) {
+                if (e.button === 0) {
+                    selectedShip = null;
+                    playerFleet.forEach(s => {
+                        s.selected = false;
+                        if (Math.hypot(s.x - mouseX, s.y - mouseY) < 45) { s.selected = true; selectedShip = s; }
+                    });
                 }
             }
         });
 
-        // Block Right Click Context Menu natively
         window.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             if (gameState === 'PLAY' && selectedShip && mouseY < canvas.height - 140) {
-                selectedShip.navigateTowards(mouseX, mouseY);
+                selectedShip.navigate(mouseX, mouseY);
+                fxManager.spawnPlasmaBlast(mouseX, mouseY, CLR_CYAN); // Flash marker click
             }
         });
 
         window.addEventListener('keydown', (e) => {
-            if (gameState === 'SHOP' && e.key === 'Escape') gameState = 'MENU';
             if (gameState === 'PLAY' && selectedShip) {
-                if (e.key === 'q' || e.key === 'Q') selectedShip.fireBroadside('left', cannonBalls);
-                if (e.key === 'e' || e.key === 'E') selectedShip.fireBroadside('right', cannonBalls);
+                if (e.key === 'q' || e.key === 'Q') selectedShip.fireBroadside('left');
+                if (e.key === 'e' || e.key === 'E') selectedShip.fireBroadside('right');
             }
         });
 
-        // Core Loop Lifecycle
-        function loop() {
-            let frCount = playerFleet.filter(s => !s.isSunk).length;
-            let brCount = enemyFleet.filter(s => !s.isSunk).length;
-
-            if (gameState === 'PLAY') {
-                camera.update();
-                particleManager.update();
-
-                for (let ps of playerFleet) ps.updatePhysics();
-
-                // Enemy AI Routine Engine Matrix
-                for (let es of enemyFleet) {
-                    if (es.isSunk) continue;
-                    es.updatePhysics();
-
-                    let livePlayers = playerFleet.filter(p => !p.isSunk);
-                    if (livePlayers.length > 0) {
-                        let closest = livePlayers[0];
-                        let minDist = Math.hypot(closest.x - es.x, closest.y - es.y);
-                        for (let p of livePlayers) {
-                            let d = Math.hypot(p.x - es.x, p.y - es.y);
-                            if (d < minDist) { minDist = d; closest = p; }
-                        }
-                        es.navigateTowards(closest.x, closest.y);
-
-                        if (minDist < 280 && es.reloadTimer === 0) {
-                            let angToTarget = Math.atan2(closest.y - es.y, closest.x - es.x);
-                            let diff = (angToTarget - es.angle + Math.PI) % (Math.PI * 2) - Math.PI;
-                            if (Math.abs(diff - Math.PI / 2) < 0.3) es.fireBroadside('left', cannonBalls);
-                            else if (Math.abs(diff + Math.PI / 2) < 0.3) es.fireBroadside('right', cannonBalls);
-                        }
-                    }
+        // UI Suite Engine
+        const uiSystem = {
+            menuButtons: { play: { x: 0, y: 0, w: 300, h: 50 }, shop: { x: 0, y: 0, w: 300, h: 50 } },
+            drawMainMenu(ctx) {
+                ctx.fillStyle = CLR_OCEAN; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Holographic Matrix Grid Backboard lines
+                ctx.strokeStyle = 'rgba(0, 242, 255, 0.05)'; ctx.lineWidth = 1;
+                for (let i = 0; i < canvas.width; i += 50) {
+                    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
                 }
 
-                // Shell/Projectile Tracking Loops
-                for (let i = cannonBalls.length - 1; i >= 0; i--) {
-                    let ball = cannonBalls[i];
-                    ball.update();
+                ctx.textAlign = 'center';
+                ctx.shadowBlur = 30; ctx.shadowColor = CLR_CYAN;
+                ctx.fillStyle = CLR_CYAN; ctx.font = 'black 52px "Courier New"';
+                ctx.fillText("⚡ NAPOLEON: NEON OVERDRIVE ⚡", canvas.width / 2, canvas.height / 2 - 160);
 
-                    let targets = ball.faction === 'French' ? enemyFleet : playerFleet;
-                    let hitDetected = false;
+                ctx.shadowBlur = 10; ctx.fillStyle = CLR_WHITE; ctx.font = '16px "Courier New"';
+                ctx.fillText("TACTICAL CYBER-EMPIRE VECTOR COMBAT SHIP SIMULATOR", canvas.width / 2, canvas.height / 2 - 100);
 
-                    for (let target of targets) {
-                        if (!target.isSunk && Math.hypot(target.x - ball.x, target.y - ball.y) < 22) {
-                            let dmg = Math.floor(Math.random() * 30) + 35;
-                            if (uiSystem.shopItems[1].bought && ball.faction === 'French') {
-                                dmg = Math.floor(dmg * 1.35);
-                            }
-                            target.health -= dmg;
-                            particleManager.spawnSplinterExplosion(ball.x, ball.y);
-                            camera.triggerShake(4, 6);
-                            hitDetected = true;
+                ctx.fillStyle = CLR_GOLD; ctx.font = 'bold 18px "Courier New"';
+                ctx.fillText(`[ QUANTUM RESERVES: ${systems.goldDoubloons} CRIT-COINS ]`, canvas.width / 2, canvas.height / 2 - 50);
 
-                            if (target.health <= 0) {
-                                target.isSunk = true;
-                                if (ball.faction === 'French') {
-                                    uiSystem.goldDoubloons += Math.floor(Math.random() * 40) + 80;
+                this.menuButtons.play = { x: canvas.width/2 - 150, y: canvas.height/2 + 20, w: 300, h: 55 };
+                this.menuButtons.shop = { x: canvas.width/2 - 150, y: canvas.height/2 + 95, w: 300, h: 55 };
+
+                for (let key in this.menuButtons) {
+                    let btn = this.menuButtons[key];
+                    let isHover = mouseX >= btn.x && mouseX <= btn.x + btn.w && mouseY >= btn.y && mouseY <= btn.y + btn.h;
+                    ctx.shadowBlur = isHover ? 25 : 5; ctx.shadowColor = isHover ? CLR_CYAN : '#1d4ed8';
+                    ctx.fillStyle = isHover ? '#0284c7' : '#0369a1'; ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+                    ctx.strokeStyle = CLR_CYAN; ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+                    ctx.fillStyle = CLR_WHITE; ctx.font = 'bold 18px "Courier New"';
+                    ctx.fillText(key.toUpperCase() + " SYSTEM", btn.x + btn.w/2, btn.y + btn.h/2 + 6);
+                }
+            },
+            drawShopMenu(ctx) {
+                ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = CLR_HUD_BORDER; ctx.strokeRect(50, 50, canvas.width - 100, canvas.height - 100);
+
+                ctx.textAlign = 'left'; ctx.fillStyle = CLR_CYAN; ctx.font = 'bold 38px "Courier New"';
+                ctx.fillText("⚡ RE-ENGINERING NANOTECH WING", 100, 110);
+                ctx.fillStyle = CLR_WHITE; ctx.font = '16px "Courier New"';
+                ctx.fillText(`AVAILABLE BALANCE: ${systems.goldDoubloons} MATRIX CREDITS`, 100, 155);
+
+                this.shopItems = shopItems;
+                this.shopItems.forEach((item, idx) => {
+                    let bx = 100, by = 220 + idx * 80, bw = canvas.width - 200, bh = 60;
+                    let isHover = mouseX >= bx && mouseX <= bx + bw && mouseY >= by && mouseY <= by + bh;
+                    ctx.fillStyle = isHover ? '#0f172a' : '#020617'; ctx.fillRect(bx, by, bw, bh);
+                    ctx.strokeStyle = item.bought ? CLR_GOLD : CLR_HUD_BORDER; ctx.strokeRect(bx, by, bw, bh);
+                    ctx.fillStyle = CLR_WHITE; ctx.fillText(`${item.name} -> [ ${item.bought ? "LINK INTEGRATED" : "COST: " + item.cost + " CRIT"} ]`, 130, by + 36);
+                });
+
+                let esc = { x: 100, y: canvas.height - 120, w: 240, h: 45 };
+                ctx.fillStyle = '#991b1b'; ctx.fillRect(esc.x, esc.y, esc.w, esc.h);
+                ctx.fillStyle = CLR_WHITE; ctx.textAlign = 'center'; ctx.fillText("CONFIRM RETURN", esc.x + esc.w/2, esc.y + esc.h/2 + 5);
+            },
+            drawCombatHud(ctx, selectedShip, activeFr, activeBr) {
+                const hY = canvas.height - 140;
+                ctx.fillStyle = CLR_HUD_BG; ctx.fillRect(0, hY, canvas.width, 140);
+                ctx.strokeStyle = CLR_HUD_BORDER; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, hY); ctx.lineTo(canvas.width, hY); ctx.stroke();
+
+                // Dynamic headcounts with cyber layouts
+                ctx.textAlign = 'left'; ctx.font = 'bold 14px "Courier New"';
+                ctx.fillStyle = CLR_CYAN; ctx.fillText(`⚡ EMPIRE FLEET: [ ${activeFr} OVERLORDS ONLINE ]`, 40, hY + 35);
+                ctx.fillStyle = CLR_NEON_RED; ctx.fillText(`🚨 COALITION TARGETS: [ ${activeBr} ALIVE ]`, 40, hY + 60);
+
+                ctx.fillStyle = CLR_GOLD;
+                ctx.fillText(`💰 BANKING CREDITS: ${systems.goldDoubloons} COINS  || SCORE: ${systems.score} [COMBO x${systems.combo}]`, 40, hY + 90);
+
+                if (selectedShip) {
+                    ctx.fillStyle = CLR_WHITE;
+                    ctx.fillText(`ACTIVE CONTROLLER LINK -> ${selectedShip.name} // BURST CHARGE: ${selectedShip.reloadTimer === 0 ? 'READY' : 'CHARGING'}`, 40, hY + 120);
+                } else {
+                    ctx.fillStyle = '#4b5563'; ctx.fillText("SELECT AN ARMORED DRIVETRAIN SYSTEM DREADNOUGHT TO INITIATE VECTOR MATRIX FIRING ROUTINES.", 40, hY + 120);
+                }
+            }
+        };
+
+        // Main Core Execution Dynamic Frames Loop
+        function mainLoop() {
+            frameCount++;
+            if (gameState === 'PLAY') {
+                camera.update();
+                fxManager.update();
+
+                // Dynamic combo reduction timers over clock cycles
+                if (systems.comboTimer > 0) {
+                    systems.comboTimer--;
+                    if (systems.comboTimer === 0) systems.combo = 0;
+                }
+
+                // Systems updates
+                playerFleet.forEach(s => s.update());
+                enemyFleet.forEach(es => {
+                    if (es.isSunk) return;
+                    es.update();
+                    let livePlayers = playerFleet.filter(p => !p.isSunk);
+                    if (livePlayers.length > 0) {
+                        let target = livePlayers[0];
+                        es.navigate(target.x, target.y);
+                        if (Math.hypot(target.x - es.x, target.y - es.y) < 320 && es.reloadTimer === 0) {
+                            es.fireBroadside(Math.random() > 0.5 ? 'left' : 'right');
+                        }
+                    }
+                });
+
+                // Laser shells vector track matrix validation loop bounds check
+                for (let i = activeProjectiles.length - 1; i >= 0; i--) {
+                    let b = activeProjectiles[i];
+                    b.update();
+
+                    let targets = b.faction === 'French' ? enemyFleet : playerFleet;
+                    let hit = false;
+                    for (let t of targets) {
+                        if (!t.isSunk && Math.hypot(t.x - b.x, t.y - b.y) < 26) {
+                            let dmg = Math.floor(Math.random() * 40) + 50;
+                            if (b.faction === 'French' && shopItems[1].bought) dmg *= 2.0; // Overcharged multiply railguns!
+                            
+                            t.health -= dmg; hit = true;
+                            fxManager.spawnPlasmaBlast(b.x, b.y, b.color);
+                            fxManager.spawnDamageText(b.x, b.y, `-${dmg} HP`, b.color);
+                            camera.triggerShake(12, 8);
+
+                            if (t.health <= 0) {
+                                t.isSunk = true;
+                                fxManager.spawnPlasmaBlast(t.x, t.y, '#ffffff');
+                                camera.triggerShake(30, 25); // Ultra colossal destruction screen shake shake
+                                if (b.faction === 'French') {
+                                    systems.combo++;
+                                    systems.comboTimer = 200;
+                                    let payout = (Math.floor(Math.random() * 100) + 200) * (1 + systems.combo * 0.5);
+                                    systems.goldDoubloons += Math.floor(payout);
+                                    systems.score += 1000 * systems.combo;
+                                    fxSystemString = `FATAL CRIT SINK!! +${Math.floor(payout)} GOLD`;
+                                    fxManager.spawnDamageText(t.x, t.y, fxSystemString, CLR_GOLD);
                                 }
                             }
                             break;
                         }
                     }
-
-                    if (hitDetected || ball.age >= ball.maxAge) {
-                        if (!hitDetected) particleManager.spawnSmoke(ball.x, ball.y, 5, 2);
-                        cannonBalls.splice(i, 1);
-                    }
+                    if (hit || b.age >= b.maxAge) activeProjectiles.splice(i, 1);
                 }
             }
 
-            // RENDERING DISPATCH STAGE
-            if (gameState === 'MENU') {
-                uiSystem.drawMainMenu(ctx);
-            } else if (gameState === 'SHOP') {
-                uiSystem.drawShopMenu(ctx);
-            } else if (gameState === 'PLAY') {
-                ctx.fillStyle = CLR_OCEAN;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // RENDERING CANVAS BLITTING LAYERS DELEGATE
+            if (gameState === 'MENU') uiSystem.drawMainMenu(ctx);
+            else if (gameState === 'SHOP') uiSystem.drawShopMenu(ctx);
+            else if (gameState === 'PLAY') {
+                ctx.fillStyle = CLR_OCEAN; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                // Grid background layers
-                for (let gx = 0; gx < canvas.width; gx += 80) {
-                    for (let gy = 0; gy < canvas.height - 140; gy += 80) {
-                        ctx.fillStyle = CLR_WAVE;
-                        ctx.beginPath();
-                        ctx.arc(gx + camera.dx, gy + camera.dy, 2, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
+                // Holographic tactical vector sonar lines mapping nodes
+                ctx.strokeStyle = 'rgba(0, 242, 255, 0.03)'; ctx.lineWidth = 1;
+                for (let x = 0; x < canvas.width; x += 60) {
+                    ctx.beginPath(); ctx.moveTo(x + camera.dx, 0); ctx.lineTo(x + camera.dx, canvas.height - 140); ctx.stroke();
+                }
+                for (let y = 0; y < canvas.height - 140; y += 60) {
+                    ctx.beginPath(); ctx.moveTo(0, y + camera.dy); ctx.lineTo(canvas.width, y + camera.dy); ctx.stroke();
                 }
 
-                particleManager.drawWakes(ctx, camera);
-                for (let s of playerFleet.concat(enemyFleet)) s.draw(ctx, camera);
-                for (let b of cannonBalls) b.draw(ctx, camera);
-                particleManager.drawTopLayers(ctx, camera);
+                // Canvas Raster array loops
+                playerFleet.concat(enemyFleet).forEach(ship => ship.draw(ctx));
+                activeProjectiles.forEach(p => p.draw(ctx));
+                fxManager.draw(ctx);
 
-                uiSystem.drawCombatHud(ctx, selectedShip, frCount, brCount);
+                let fr = playerFleet.filter(s => !s.isSunk).length;
+                let br = enemyFleet.filter(s => !s.isSunk).length;
+                uiSystem.drawCombatHud(ctx, selectedShip, fr, br);
             }
 
-            requestAnimationFrame(loop);
+            requestAnimationFrame(mainLoop);
         }
 
-        loop();
+        mainLoop();
     </script>
 </body>
 </html>
